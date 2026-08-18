@@ -3,7 +3,7 @@ import numpy as np
 from PIL import Image
 from torch.utils.data import Dataset
 from torchvision import transforms
-from utils.data import iCIFAR10, iCIFAR100, iImageNet100, iImageNet1000, iCIFAR224, iImageNetR,iImageNetA,CUB, objectnet, omnibenchmark, vtab
+from utils.data import iCIFAR10, iCIFAR100, iImageNet100, iImageNet1000, iCIFAR224, iImageNetR,iImageNetA,CUB, objectnet, omnibenchmark, vtab, iIP102
 
 
 class DataManager(object):
@@ -35,6 +35,8 @@ class DataManager(object):
             x, y = self._train_data, self._train_targets
         elif source == "test":
             x, y = self._test_data, self._test_targets
+        elif source == "val":
+            x, y = self._val_data, self._val_targets
         else:
             raise ValueError("Unknown data source {}.".format(source))
 
@@ -141,6 +143,8 @@ class DataManager(object):
         # Data
         self._train_data, self._train_targets = idata.train_data, idata.train_targets
         self._test_data, self._test_targets = idata.test_data, idata.test_targets
+        self._val_data = getattr(idata, "val_data", None)
+        self._val_targets = getattr(idata, "val_targets", None)
         self.use_path = idata.use_path
 
         # Transforms
@@ -163,6 +167,8 @@ class DataManager(object):
             self._train_targets, self._class_order
         )
         self._test_targets = _map_new_class_index(self._test_targets, self._class_order)
+        if self._val_data is not None:
+            self._val_targets = _map_new_class_index(self._val_targets, self._class_order)
 
     def _select(self, x, y, low_range, high_range):
         idxes = np.where(np.logical_and(y >= low_range, y < high_range))[0]
@@ -235,6 +241,8 @@ def _get_idata(dataset_name):
         return omnibenchmark()
     elif name=="vtab":
         return vtab()
+    elif name=="ip102":
+        return iIP102()
 
     else:
         raise NotImplementedError("Unknown dataset {}.".format(dataset_name))

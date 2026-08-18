@@ -1,3 +1,6 @@
+import json
+import os
+
 import numpy as np
 from torchvision import datasets, transforms
 from utils.toolkit import split_images_labels
@@ -303,3 +306,112 @@ class vtab(iData):
 
         self.train_data, self.train_targets = split_images_labels(train_dset.imgs)
         self.test_data, self.test_targets = split_images_labels(test_dset.imgs)
+
+
+def _find_dir_with_file(base, filename, maxdepth=8):
+    base = os.path.abspath(base)
+    for dirpath, dirnames, filenames in os.walk(base):
+        depth = dirpath[len(base):].count(os.sep)
+        if depth > maxdepth:
+            dirnames[:] = []
+            continue
+        if filename in filenames:
+            return dirpath
+    return None
+
+
+def _find_ip102_root():
+    if os.environ.get('IP102_DATA_ROOT'):
+        return os.environ['IP102_DATA_ROOT']
+    if os.path.isdir('/kaggle/input'):
+        found = _find_dir_with_file('/kaggle/input', 'train.json')
+        if found:
+            return found
+    here = os.path.dirname(os.path.abspath(__file__))
+    base = os.path.dirname(here)
+    candidates = [
+        os.path.join(base, 'iCaRL', 'IP102 dataset'),
+        os.path.join(here, 'IP102 dataset'),
+        os.path.join(base, 'IP102 dataset'),
+        os.path.join(os.getcwd(), 'data', 'ip102'),
+        os.path.join(os.getcwd(), 'IP102 dataset'),
+    ]
+    for cand in candidates:
+        if os.path.exists(os.path.join(cand, 'train.json')):
+            return cand
+    raise FileNotFoundError(
+        'Khong tim thay thu muc IP102 dataset (train.json). '
+        'Dat bien moi truong IP102_DATA_ROOT hoac dat thu muc theo mot trong: %s'
+        % candidates)
+
+
+def _find_ip102_image_dir(data_root):
+    for rel in ['VOC2007/VOC2007/JPEGImages', 'VOC2007/JPEGImages',
+                'JPEGImages', 'images', 'Images']:
+        p = os.path.join(data_root, rel)
+        if os.path.isdir(p):
+            return p
+    for dirpath, dirnames, filenames in os.walk(data_root):
+        if os.path.basename(dirpath).lower() in ('jpegimages', 'images'):
+            return dirpath
+    raise FileNotFoundError('Khong tim thay thu muc JPEGImages trong ' + data_root)
+
+
+def _load_ip102_coco(json_path):
+    with open(json_path, 'r', encoding='utf-8') as f:
+        d = json.load(f)
+    file_name = {im['id']: im['file_name'] for im in d['images']}
+    return file_name, d['annotations']
+
+
+def _build_ip102_image_label(anns):
+    image_id_to_cat = {}
+    for a in anns:
+        img = a['image_id']
+        cat = a['category_id']
+        area = a.get('area', 0)
+        if img not in image_id_to_cat or area > image_id_to_cat[img][1]:
+            image_id_to_cat[img] = (cat, area)
+    return {k: v[0] for k, v in image_id_to_cat.items()}
+
+
+class iIP102(iData):
+    use_path = True
+    train_trsf = build_transform(True, None)
+    test_trsf = build_transform(False, None)
+    common_trsf = []
+    class_order = None
+
+    def download_data(self):
+        data_root = _find_ip102_root()
+        image_dir = _find_ip102_image_dir(data_root)
+
+        meta = {}
+        for s in ('train', 'test', 'val'):
+            jp = os.path.join(data_root, s + '.json')
+            meta[s] = _load_ip102_coco(jp) if os.path.exists(jp) else (None, None)
+
+        class_ids = sorted(set(a['category_id'] for a in meta['train'][1]))
+        self.num_classes = len(class_ids)
+        self.class_order = np.arange(self.num_classes).tolist()
+        cid2idx = {cid: i for i, cid in enumerate(class_ids)}
+
+        for s in ('train', 'test', 'val'):
+            file_name, anns = meta[s]
+            if file_name is None:
+                setattr(self, '%s_data' % s, None)
+                setattr(self, '%s_targets' % s, None)
+                continue
+            img_label = _build_ip102_image_label(anns)
+            paths, labels = [], []
+            for img_id, cat in img_label.items():
+                if cat not in cid2idx:
+                    continue
+                paths.append(os.path.join(image_dir, file_name[img_id]))
+                labels.append(cid2idx[cat])
+            order = np.argsort(labels, kind='stable')
+            setattr(self, '%s_data' % s, np.array(paths)[order])
+            setattr(self, '%s_targets' % s, np.array(labels)[order].astype(np.int64))
+
+        if self.val_data is None or len(self.val_data) == 0:
+            self.val_data, self.val_targets = self.test_data, self.test_targets

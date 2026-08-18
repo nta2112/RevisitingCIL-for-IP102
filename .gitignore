@@ -1,0 +1,9 @@
+__pycache__/
+*.py[cod]
+*$py.class
+*.log
+.ipynb_checkpoints/
+.git/
+pretrained_models/
+data/
+logs/
