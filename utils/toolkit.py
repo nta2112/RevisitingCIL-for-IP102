@@ -9,6 +9,22 @@ def count_parameters(model, trainable=False):
     return sum(p.numel() for p in model.parameters())
 
 
+def get_loader_kwargs(n_devices, batch_size, num_workers, shuffle):
+    """Return DataLoader kwargs safe for nn.DataParallel.
+
+    With more than one GPU, every batch must be divisible by the number of
+    devices (DataParallel scatters batch dim) and the last partial batch must
+    be dropped, mirroring the iCaRL fixes for 2-GPU runs.
+    """
+    drop_last = n_devices > 1
+    bs = batch_size
+    if n_devices > 1:
+        bs = (bs // n_devices) * n_devices
+        if bs == 0:
+            bs = n_devices
+    return dict(batch_size=bs, shuffle=shuffle, num_workers=num_workers, drop_last=drop_last)
+
+
 def tensor2numpy(x):
     return x.cpu().data.numpy() if x.is_cuda else x.data.numpy()
 

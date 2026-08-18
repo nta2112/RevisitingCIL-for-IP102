@@ -9,7 +9,7 @@ from torch.nn import functional as F
 from torch.utils.data import DataLoader
 from utils.inc_net import IncrementalNet,SimpleCosineIncrementalNet,SimpleVitNet
 from models.base import BaseLearner
-from utils.toolkit import target2onehot, tensor2numpy
+from utils.toolkit import target2onehot, tensor2numpy, get_loader_kwargs
 
 
 num_workers = 8
@@ -59,12 +59,12 @@ class Learner(BaseLearner):
         train_dataset = data_manager.get_dataset(np.arange(self._known_classes, self._total_classes),source="train", mode="train", )
         self.train_dataset=train_dataset
         self.data_manager=data_manager
-        self.train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers)
+        self.train_loader = DataLoader(train_dataset, **get_loader_kwargs(len(self._multiple_gpus), batch_size, num_workers, True))
         test_dataset = data_manager.get_dataset(np.arange(0, self._total_classes), source="test", mode="test" )
-        self.test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers)
+        self.test_loader = DataLoader(test_dataset, **get_loader_kwargs(len(self._multiple_gpus), batch_size, num_workers, False))
 
         train_dataset_for_protonet=data_manager.get_dataset(np.arange(self._known_classes, self._total_classes),source="train", mode="test", )
-        self.train_loader_for_protonet = DataLoader(train_dataset_for_protonet, batch_size=batch_size, shuffle=True, num_workers=num_workers)
+        self.train_loader_for_protonet = DataLoader(train_dataset_for_protonet, **get_loader_kwargs(len(self._multiple_gpus), batch_size, num_workers, True))
 
         if len(self._multiple_gpus) > 1:
             print('Multiple GPUs')

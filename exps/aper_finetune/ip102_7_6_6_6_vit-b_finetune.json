@@ -13,7 +13,8 @@
     "optimizer": "sgd",
     "min_lr": 0,
     "device": [
-        "0"
+        "0",
+        "1"
     ],
     "seed": [
         1993
