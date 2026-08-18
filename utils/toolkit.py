@@ -25,6 +25,13 @@ def get_loader_kwargs(n_devices, batch_size, num_workers, shuffle):
     return dict(batch_size=bs, shuffle=shuffle, num_workers=num_workers, drop_last=drop_last)
 
 
+def unwrap_model(model):
+    """Return the inner module when the model is wrapped in nn.DataParallel."""
+    if isinstance(model, torch.nn.DataParallel):
+        return model.module
+    return model
+
+
 def tensor2numpy(x):
     return x.cpu().data.numpy() if x.is_cuda else x.data.numpy()
 

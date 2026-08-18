@@ -9,7 +9,7 @@ from torch.nn import functional as F
 from torch.utils.data import DataLoader
 from utils.inc_net import IncrementalNet, SimpleCosineIncrementalNet, MultiBranchCosineIncrementalNet, SimpleVitNet
 from models.base import BaseLearner
-from utils.toolkit import target2onehot, tensor2numpy, get_loader_kwargs
+from utils.toolkit import target2onehot, tensor2numpy, get_loader_kwargs, unwrap_model
 
 # tune the model (with forward BN) at first session, and then conduct simple shot.
 
@@ -39,7 +39,7 @@ class Learner(BaseLearner):
         self._known_classes = self._total_classes
 
     def replace_fc(self, trainloader, model, args):
-        model = model.eval()
+        model = unwrap_model(model).eval()
 
         embedding_list = []
         label_list = []
@@ -66,7 +66,7 @@ class Learner(BaseLearner):
             embedding = embedding_list[data_index]
             proto = embedding.mean(0)
             # new_fc.append(proto)
-            self._network.fc.weight.data[class_index] = proto
+            model.fc.weight.data[class_index] = proto
         return model
 
     def update_fc(self, dataloader, class_list, session):
@@ -111,7 +111,7 @@ class Learner(BaseLearner):
             self._network = nn.DataParallel(self._network, self._multiple_gpus)
         self._train(self.train_loader, self.test_loader, self.train_loader_for_protonet)
         if len(self._multiple_gpus) > 1:
-            self._network = self._network.module
+            self._network = unwrap_model(self._network)
 
     def _train(self, train_loader, test_loader, train_loader_for_protonet):
 
@@ -139,7 +139,7 @@ class Learner(BaseLearner):
 
     def construct_dual_branch_network(self):
         network = MultiBranchCosineIncrementalNet(self.args, True)
-        network.construct_dual_branch_network(self._network)
+        network.construct_dual_branch_network(unwrap_model(self._network))
         self._network = network.to(self._device)
 
     def record_running_mean(self):
@@ -154,7 +154,7 @@ class Learner(BaseLearner):
                 else:
                     running_dict[key_name] = {}
                 # find the position of BN modules
-                component = self._network.convnet
+                component = unwrap_model(self._network).convnet
                 for att in key_name.split('.'):
                     if att.isdigit():
                         component = component[int(att)]
@@ -178,7 +178,7 @@ class Learner(BaseLearner):
                     # print('running name',key_name)
                     running_dict[key_name] = {}
                 # find the position of BN modules
-                component = self._network.convnet
+                component = unwrap_model(self._network).convnet
                 for att in key_name.split('.'):
                     # print(att)
                     if att.isdigit():
